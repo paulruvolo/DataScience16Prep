@@ -8,6 +8,8 @@ from copy import deepcopy
 import urllib
 import os
 
+MATCH_THRESH=10
+
 def markdown_heading_cell(text, heading_level):
     return {u'cell_type':u'markdown',u'metadata':{},u'source':unicode(heading_level + " " + text)}
 
@@ -56,14 +58,18 @@ problem_prompts = problem_prompts_all[int(sys.argv[2])]
 
 filtered_cells = []
 for i,prompt in enumerate(problem_prompts):
-    best_match = argmin([Levenshtein.distance(prompt['start'], u''.join(cell['source'])) for cell in cells])
+    distances = [Levenshtein.distance(prompt['start'], u''.join(cell['source'])) for cell in cells]
+    #print min(distances)
+    if min(distances) > MATCH_THRESH:
+        continue
+
+    best_match = argmin(distances)
     if len(prompt['end']) == 0:
         end_offset = len(cells) - best_match
     else:
         end_offset = argmin([Levenshtein.distance(prompt['end'], u''.join(cell['source'])) for cell in cells[best_match:]])
     if ('omit_heading' not in prompt) or prompt['omit_heading'] == False:
         filtered_cells.append(markdown_heading_cell('Question ' + str(i+1),'##'))
-    print ('omit_heading' not in prompt) or prompt['omit_heading'] == False
     filtered_cells.append(cells[best_match])
     filtered_cells.extend(cells[best_match+1:best_match+end_offset])
 
