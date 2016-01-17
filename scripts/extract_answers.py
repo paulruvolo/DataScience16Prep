@@ -25,8 +25,25 @@ cells = nb['cells']
 
 problem_prompts_all = []
 problem_prompts_all.append([
-                            {'start' : u'Count the number of live births with <tt>birthwgt_lb</tt> between 9 and 95 pounds (including both).  The result should be 798 ', 'end': u'Use <tt>birthord</tt> to select the records for first babies and others.  How many are there of each?'},
-                            {'start' : u'Compute the mean <tt>prglngth</tt> for first babies and others.  Compute the difference in means, expressed in hours.', 'end':u''},
+                            {'start': u"""Print value counts for <tt>prglngth</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611931)""",
+                             'end' : u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
+
+Looking at this data, please remember my comments in the book about the obligation to approach data with consideration for the context and respect for the respondents."""},
+                            {'start': u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
+
+Looking at this data, please remember my comments in the book about the obligation to approach data with consideration for the context and respect for the respondents.""",
+                             'end': u"""Compute the mean birthweight."""},
+                            {'start': u"""Create a new column named <tt>totalwgt_kg</tt> that contains birth weight in kilograms.  Compute its mean.  Remember that when you create a new column, you have to use dictionary syntax, not dot notation.""",
+                             'end' : u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics."""},
+
+                            {'start': u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics.""",
+                             'end': u"""Create a boolean Series."""},
+                            {'start' : u'Count the number of live births with <tt>birthwgt_lb</tt> between 9 and 95 pounds (including both).  The result should be 798 ',
+                             'end': u'Use <tt>birthord</tt> to select the records for first babies and others.  How many are there of each?'},
+                            {'start' : u'Compute the mean <tt>prglngth</tt> for first babies and others.  Compute the difference in means, expressed in hours.',
+                             'end':u"""## Clarifying Questions
+
+Use this space to ask questions regarding the content covered in the reading. These questions should be restricted to helping you better understand the material. For questions that push beyond what is in the reading, use the next answer field. If you don't have a fully formed question, but are generally having a difficult time with a topic, you can indicate that here as well."""},
                             {'omit_heading' : True,
                              'start' : u"""## Clarifying Questions
 
