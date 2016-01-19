@@ -73,6 +73,7 @@ class QuestionPrompt(object):
             the extracted responses is contined in question_heading.
             To omit the question heading, specify the empty string.
         """
+        self.question_heading = question_heading
         self.start_md = start_md
         self.stop_md = stop_md
 
@@ -156,3 +157,4 @@ If you found any useful resources, or tried some useful exercises that you'd lik
         sys.exit(-1)
 
     nbe = NotebookExtractor(sys.argv[1], question_prompts)
+    nbe.extract()
