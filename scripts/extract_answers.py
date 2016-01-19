@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+""" This script is designed to support active reading.  It takes as input
+    a set of ipython notebook as well as some target cells which define a set
+    of reading exercises.  The script processes the collection of notebooks
+    and builds a notebook which summarizes the responses to each question.
+
+    TODO:
+        (1) Currently there is only support for parsing a single notebook,
+            however, it will be very easy to extend this to multiple notebooks
+
+"""
+
 import sys
 import json
 from numpy import argmin
@@ -8,94 +19,140 @@ from copy import deepcopy
 import urllib
 import os
 
-MATCH_THRESH=10
+class NotebookExtractor(object):
+    """ The top-level class for extracting answers from a notebook.
+        TODO: add support multiple notebooks
+    """
 
-def markdown_heading_cell(text, heading_level):
-    return {u'cell_type':u'markdown',u'metadata':{},u'source':unicode(heading_level + " " + text)}
+    MATCH_THRESH=10             # The maximum edit distance to consider something a match
 
-if len(sys.argv) < 3:
-    print "USAGE: ./extract_answers.py ipynb-url problem_set_index_(starting_from_0)"
-    sys.exit(-1)
+    def __init__(self, notebook_URL, question_prompts):
+        """ Initialize with the specified notebook URL and
+            list of question prompts """
+        self.notebook_URL = notebook_URL
+        self.question_prompts = question_prompts
 
-print sys.argv[1]
-fid = urllib.urlopen(sys.argv[1])
-nb = json.load(fid)
-fid.close()
-cells = nb['cells']
+    def extract(self):
+        """ Filter the notebook at the notebook_URL so that it only contains
+            the questions and answers to the reading.
+        """
+        fid = urllib.urlopen(sys.argv[1])
+        nb = json.load(fid)
+        fid.close()
+        cells = nb['cells']
+        filtered_cells = []
+        for i,prompt in enumerate(question_prompts):
+            filtered_cells.extend(prompt.get_closest_match(cells, NotebookExtractor.MATCH_THRESH))
 
-problem_prompts_all = []
-problem_prompts_all.append([
-                            {'start': u"""Print value counts for <tt>prglngth</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611931)""",
-                             'end' : u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
+        leading, nb_name_full = os.path.split(self.notebook_URL)
+        nb_name_stem, extension = os.path.splitext(nb_name_full)
 
-Looking at this data, please remember my comments in the book about the obligation to approach data with consideration for the context and respect for the respondents."""},
-                            {'start': u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
+        fid = open(nb_name_stem + "_responses.ipynb",'wt')
+
+        answer_book = deepcopy(nb)
+        answer_book['cells'] = filtered_cells
+        json.dump(answer_book, fid)
+        fid.close()
+
+    @staticmethod
+    def markdown_heading_cell(text, heading_level):
+        """ A convenience function to return a markdown cell
+            with the specified text at the specified heading_level.
+            e.g. mark_down_heading_cell('Notebook Title','#')
+        """
+        return {u'cell_type':u'markdown',u'metadata':{},u'source':unicode(heading_level + " " + text)}
+
+class QuestionPrompt(object):
+    def __init__(self, question_heading, start_md, stop_md):
+        """ Initialize a question prompt with the specified
+            starting markdown (the question), and stopping
+            markdown (the markdown from the next content
+            cell in the notebook).  To read to the end of the
+            notebook, set stop_md to the empty string.  The
+            heading to use in the summary notebook before
+            the extracted responses is contined in question_heading.
+            To omit the question heading, specify the empty string.
+        """
+        self.start_md = start_md
+        self.stop_md = stop_md
+
+    def get_closest_match(self, cells, matching_threshold):
+        """ Returns a list of cells that most closely match
+            the question prompt.  If no match is better than
+            the matching_threshold, the empty list will be
+            returned. """
+        return_value = []
+        distances = [Levenshtein.distance(self.start_md, u''.join(cell['source'])) for cell in cells]
+        if min(distances) > matching_threshold:
+            return return_value
+
+        best_match = argmin(distances)
+        if len(self.stop_md) == 0:
+            end_offset = len(cells) - best_match
+        else:
+            distances = [Levenshtein.distance(self.stop_md, u''.join(cell['source'])) for cell in cells[best_match:]]
+            if min(distances) > matching_threshold:
+                return return_value
+            end_offset = argmin(distances)
+        if len(self.question_heading) != 0:
+            return_value.append(NotebookExtractor.markdown_heading_cell(self.question_heading,'##'))
+        return_value.append(cells[best_match])
+        return_value.extend(cells[best_match+1:best_match+end_offset])
+        return return_value
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print "USAGE: ./extract_answers.py ipynb-url problem_set"
+        sys.exit(-1)
+    question_prompts = []
+    if sys.argv[2] == "1":
+        question_prompts.append(QuestionPrompt(u"Question 1",
+                                               u"""Print value counts for <tt>prglngth</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611931)""",
+                                               u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
+
+Looking at this data, please remember my comments in the book about the obligation to approach data with consideration for the context and respect for the respondents."""))
+
+        question_prompts.append(QuestionPrompt(u"Question 2",
+                                               u"""Print value counts for <tt>agepreg</tt> and compare to results published in the [codebook](http://www.icpsr.umich.edu/nsfg6/Controller?displayPage=labelDetails&fileCode=PREG&section=A&subSec=8016&srtLabel=611935).
 
 Looking at this data, please remember my comments in the book about the obligation to approach data with consideration for the context and respect for the respondents.""",
-                             'end': u"""Compute the mean birthweight."""},
-                            {'start': u"""Create a new column named <tt>totalwgt_kg</tt> that contains birth weight in kilograms.  Compute its mean.  Remember that when you create a new column, you have to use dictionary syntax, not dot notation.""",
-                             'end' : u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics."""},
+                                               u"""Compute the mean birthweight."""))
+        question_prompts.append(QuestionPrompt(u"Question 3",
+                                               u"""Create a new column named <tt>totalwgt_kg</tt> that contains birth weight in kilograms.  Compute its mean.  Remember that when you create a new column, you have to use dictionary syntax, not dot notation.""",
+                                               u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics."""))
+        question_prompts.append(QuestionPrompt(u"Question 4",
+                                               u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics.""",
+                                               u"""Create a boolean Series."""))
+        question_prompts.append(QuestionPrompt(u"Question 5",
+                                               u'Count the number of live births with <tt>birthwgt_lb</tt> between 9 and 95 pounds (including both).  The result should be 798 ',
+                                               u'Use <tt>birthord</tt> to select the records for first babies and others.  How many are there of each?'))
+        question_prompts.append(QuestionPrompt(u"Question 6",
+                                               u'Compute the mean <tt>prglngth</tt> for first babies and others.  Compute the difference in means, expressed in hours.',
+                                               u"""## Clarifying Questions
 
-                            {'start': u"""Look through the codebook and find a variable, other than the ones mentioned in the book, that you find interesting.  Compute values counts, means, or other statistics.""",
-                             'end': u"""Create a boolean Series."""},
-                            {'start' : u'Count the number of live births with <tt>birthwgt_lb</tt> between 9 and 95 pounds (including both).  The result should be 798 ',
-                             'end': u'Use <tt>birthord</tt> to select the records for first babies and others.  How many are there of each?'},
-                            {'start' : u'Compute the mean <tt>prglngth</tt> for first babies and others.  Compute the difference in means, expressed in hours.',
-                             'end':u"""## Clarifying Questions
+Use this space to ask questions regarding the content covered in the reading. These questions should be restricted to helping you better understand the material. For questions that push beyond what is in the reading, use the next answer field. If you don't have a fully formed question, but are generally having a difficult time with a topic, you can indicate that here as well."""))
+        question_prompts.append(QuestionPrompt(u"",
+                                               u"""## Clarifying Questions
 
-Use this space to ask questions regarding the content covered in the reading. These questions should be restricted to helping you better understand the material. For questions that push beyond what is in the reading, use the next answer field. If you don't have a fully formed question, but are generally having a difficult time with a topic, you can indicate that here as well."""},
-                            {'omit_heading' : True,
-                             'start' : u"""## Clarifying Questions
+Use this space to ask questions regarding the content covered in the reading. These questions should be restricted to helping you better understand the material. For questions that push beyond what is in the reading, use the next answer field. If you don't have a fully formed question, but are generally having a difficult time with a topic, you can indicate that here as well.""",
+                                               u"""## Enrichment Questions
 
-Use this space to ask questions regarding the content covered in the reading. These questions should be restricted to helping you better understand the material. For questions that push beyond what is in the reading, use the next answer field. If you don't have a fully formed question, but are generally having a difficult time with a topic, you can indicate that here as well.""", 'end':u"""## Enrichment Questions
+Use this space to ask any questions that go beyond (but are related to) the material presented in this reading. Perhaps there is a particular topic you'd like to see covered in more depth. Perhaps you'd like to know how to use a library in a way that wasn't show in the reading. One way to think about this is what additional topics would you want covered in the next class (or addressed in a followup e-mail to the class). I'm a little fuzzy on what stuff will likely go here, so we'll see how things evolve."""))
+        question_prompts.append(QuestionPrompt(u"",
+                                               u"""## Enrichment Questions
 
-Use this space to ask any questions that go beyond (but are related to) the material presented in this reading. Perhaps there is a particular topic you'd like to see covered in more depth. Perhaps you'd like to know how to use a library in a way that wasn't show in the reading. One way to think about this is what additional topics would you want covered in the next class (or addressed in a followup e-mail to the class). I'm a little fuzzy on what stuff will likely go here, so we'll see how things evolve."""},
-                            {'omit_heading' : True,
-                             'start' : u"""## Enrichment Questions
+Use this space to ask any questions that go beyond (but are related to) the material presented in this reading. Perhaps there is a particular topic you'd like to see covered in more depth. Perhaps you'd like to know how to use a library in a way that wasn't show in the reading. One way to think about this is what additional topics would you want covered in the next class (or addressed in a followup e-mail to the class). I'm a little fuzzy on what stuff will likely go here, so we'll see how things evolve.""",
+                                               u"""## Additional Resources / Explorations
 
-Use this space to ask any questions that go beyond (but are related to) the material presented in this reading. Perhaps there is a particular topic you'd like to see covered in more depth. Perhaps you'd like to know how to use a library in a way that wasn't show in the reading. One way to think about this is what additional topics would you want covered in the next class (or addressed in a followup e-mail to the class). I'm a little fuzzy on what stuff will likely go here, so we'll see how things evolve.""",'end':u"""## Additional Resources / Explorations
+If you found any useful resources, or tried some useful exercises that you'd like to report please do so here. Let us know what you did, what you learned, and how others can replicate it."""))
+        question_prompts.append(QuestionPrompt(u"",
+                                               u"""## Additional Resources / Explorations
 
-If you found any useful resources, or tried some useful exercises that you'd like to report please do so here. Let us know what you did, what you learned, and how others can replicate it."""},
-                            {'omit_heading' : True,
-                             'start' : u"""## Additional Resources / Explorations
+If you found any useful resources, or tried some useful exercises that you'd like to report please do so here. Let us know what you did, what you learned, and how others can replicate it.""",
+                                               u""))
 
-If you found any useful resources, or tried some useful exercises that you'd like to report please do so here. Let us know what you did, what you learned, and how others can replicate it.""",'end':u""}])
-problem_prompts_all.append([
-                            {'start': u"Make a histogram of <tt>age_r</tt>, the respondent's age at the time of interview.",'end': u"Make a histogram of <tt>numfmhh</tt>, the number of people in the respondent's household."},
-                            {'start' : u"Make a histogram of <tt>numfmhh</tt>, the number of people in the respondent's household.",'end':u"Make a histogram of <tt>parity</tt>, the number children the respondent has borne.  How would you describe this distribution?"},
-                            {'start' : u"Make a histogram of <tt>parity</tt>, the number children the respondent has borne.  How would you describe this distribution?", 'end': u"Use Hist.Largest to find the largest values of <tt>parity</tt>."},
-                            {'start' : u"Use Hist.Largest to find the largest values of <tt>parity</tt>.", 'end': u"Use <tt>totincr</tt> to select the respondents with the highest income.  Compute the distribution of <tt>parity</tt> for just the high income respondents."},
-                            {'start' : u"Use <tt>totincr</tt> to select the respondents with the highest income.  Compute the distribution of <tt>parity</tt> for just the high income respondents.", 'end':u"Find the largest parities for high income respondents."},
-                            {'start' : u"Find the largest parities for high income respondents.", 'end': u"Compare the mean <tt>parity</tt> for high income respondents and others."},
-                            {'start' : u"Compare the mean <tt>parity</tt> for high income respondents and others.", 'end' : u"Investigate any other variables that look interesting."},
-                            {'start' : u"Investigate any other variables that look interesting.", 'end': u""}
-                           ])
+    if not question_prompts:
+        print "Unknown problem set"
+        sys.exit(-1)
 
-problem_prompts = problem_prompts_all[int(sys.argv[2])]
-
-filtered_cells = []
-for i,prompt in enumerate(problem_prompts):
-    distances = [Levenshtein.distance(prompt['start'], u''.join(cell['source'])) for cell in cells]
-    #print min(distances)
-    if min(distances) > MATCH_THRESH:
-        continue
-
-    best_match = argmin(distances)
-    if len(prompt['end']) == 0:
-        end_offset = len(cells) - best_match
-    else:
-        end_offset = argmin([Levenshtein.distance(prompt['end'], u''.join(cell['source'])) for cell in cells[best_match:]])
-    if ('omit_heading' not in prompt) or prompt['omit_heading'] == False:
-        filtered_cells.append(markdown_heading_cell('Question ' + str(i+1),'##'))
-    filtered_cells.append(cells[best_match])
-    filtered_cells.extend(cells[best_match+1:best_match+end_offset])
-
-leading, nb_name_full = os.path.split(sys.argv[1])
-nb_name_stem, extension = os.path.splitext(nb_name_full)
-
-fid = open(nb_name_stem + "_responses.ipynb",'wt')
-
-answer_book = deepcopy(nb)
-answer_book['cells'] = filtered_cells
-json.dump(answer_book, fid)
-fid.close()
+    nbe = NotebookExtractor(sys.argv[1], question_prompts)
