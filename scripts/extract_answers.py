@@ -16,6 +16,7 @@ import json
 from numpy import argmin
 import Levenshtein
 from copy import deepcopy
+import pandas as pd
 import urllib
 import os
 
@@ -26,30 +27,33 @@ class NotebookExtractor(object):
 
     MATCH_THRESH=10             # The maximum edit distance to consider something a match
 
-    def __init__(self, notebook_URL, question_prompts):
-        """ Initialize with the specified notebook URL and
+    def __init__(self, notebook_URLs, question_prompts):
+        """ Initialize with the specified notebook URLs and
             list of question prompts """
-        self.notebook_URL = notebook_URL
+        self.notebook_URLs = notebook_URLs
         self.question_prompts = question_prompts
 
     def extract(self):
         """ Filter the notebook at the notebook_URL so that it only contains
             the questions and answers to the reading.
         """
-        fid = urllib.urlopen(sys.argv[1])
-        nb = json.load(fid)
-        fid.close()
-        cells = nb['cells']
+        nbs = {}
+        for url in self.notebook_URLs:
+            print url
+            fid = urllib.urlopen(url)
+            nbs[url] = json.load(fid)
+            fid.close()
         filtered_cells = []
         for i,prompt in enumerate(question_prompts):
-            filtered_cells.extend(prompt.get_closest_match(cells, NotebookExtractor.MATCH_THRESH))
+            for url in nbs:
+                filtered_cells.extend(prompt.get_closest_match(nbs[url]['cells'], NotebookExtractor.MATCH_THRESH))
 
-        leading, nb_name_full = os.path.split(self.notebook_URL)
+        leading, nb_name_full = os.path.split(self.notebook_URLs[0])
         nb_name_stem, extension = os.path.splitext(nb_name_full)
 
         fid = open(nb_name_stem + "_responses.ipynb",'wt')
 
-        answer_book = deepcopy(nb)
+        answer_book = deepcopy(nbs[self.notebook_URLs[0]])
         answer_book['cells'] = filtered_cells
         json.dump(answer_book, fid)
         fid.close()
@@ -156,5 +160,7 @@ If you found any useful resources, or tried some useful exercises that you'd lik
         print "Unknown problem set"
         sys.exit(-1)
 
-    nbe = NotebookExtractor(sys.argv[1], question_prompts)
+    turnin_data = pd.read_csv(sys.argv[1])
+    notebooks = turnin_data['Link to your ipython notebook']
+    nbe = NotebookExtractor(notebooks, question_prompts)
     nbe.extract()
